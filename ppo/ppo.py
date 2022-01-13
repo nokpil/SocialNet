@@ -265,6 +265,17 @@ def ppo(
             ratio_clip = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio)
             r = torch.prod(sgn * torch.min(ratio * sgn, ratio_clip * sgn), dim=-1).unsqueeze(-1)
             loss_pi = -(torch.min(ratio * adv, r)).mean()
+        elif norm_type == 'disc_old6':
+            adv = adv.unsqueeze(-1)
+            pi, logp = ac.pi(obs, act)
+            ratio = torch.exp(logp - logp_old)
+            r = torch.prod(ratio, dim=-1).unsqueeze(-1)
+            radv = ratio * adv
+            lpi = torch.min(radv, r)
+            r_mask = (lpi == r)
+            r_min = lpi[r_mask]
+            loss_pi = -(radv).mean() - (r_min).mean()
+            loss_pi = -(torch.min(ratio * adv, r)).mean()
         elif norm_type == 'gene_ent':
             adv = adv.unsqueeze(-1)
             pi, logp = ac.pi(obs, act)
