@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 from copy import deepcopy
 
 from torch.nn.parallel import DistributedDataParallel, DataParallel
-from torch.optim import Adam
+from torch.optim import Adam, AdamW
 from torch.distributed.algorithms.join import Join
 
 import envs
@@ -157,12 +157,14 @@ def ppo(
     distributed=True,
     baselines=[],
     env_scheduler_type=None,
-    checkpoint='',
+    checkpoint=('', ''),
     local_rank=0
 ):
-
+    
     #! delete this
     checklist = ['disc_old', 'disc_old6']
+    #ent_coef = 0.003
+    #clip_ratio = 0.2
     if clip_ratio < 0:
         clip_ratio = 100  # effectively no clip
     os.environ['MPLCONFIGDIR'] = "./"
@@ -170,6 +172,7 @@ def ppo(
     rank_0 = False
     device = local_rank if distributed else 'cpu'
     n_GPUs = 1  # Can be modified according to local gpu settings
+    
     # Set up logger and save configuration
     if local_rank == 0:
         rank_0 = True
@@ -234,6 +237,9 @@ def ppo(
     del checkpoint
     torch.cuda.empty_cache()
 
+    #pi_optimizer.param_groups[0]['lr'] = 1e-6
+    #vf_optimizer.param_groups[0]['lr'] = 3e-6
+    
     # Count variables
     var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.v])
     if rank_0:
@@ -256,7 +262,7 @@ def ppo(
             ratio_clip = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio)
             r = torch.prod(sgn * torch.min(ratio * sgn, ratio_clip * sgn), dim=-1).unsqueeze(-1)
             r_mean = r.mean().detach()
-            loss_pi = -(r * adv / r_mean).mean()
+            loss_pi = -(r * adv / r_mean).mean()  - ent_coef * e_const * (pi.entropy()).mean()
         elif norm_type == 'disc_old':
             adv = adv.unsqueeze(-1)
             pi, logp = ac.pi(obs, act)
@@ -275,7 +281,16 @@ def ppo(
             r_mask = (lpi == r)
             r_min = lpi[r_mask]
             loss_pi = -(radv).mean() - (r_min).mean()
-            loss_pi = -(torch.min(ratio * adv, r)).mean()
+        elif norm_type == 'disc_old7':
+            adv = adv.unsqueeze(-1)
+            pi, logp = ac.pi(obs, act)
+            ratio = torch.exp(logp - logp_old)
+            r = torch.prod(ratio, dim=-1).unsqueeze(-1)
+            radv = ratio * adv
+            lpi = torch.min(radv, r)
+            r_mask = (lpi == r)
+            r_min = lpi[r_mask]
+            loss_pi = -(radv).mean() - (r_min).mean()
         elif norm_type == 'gene_ent':
             adv = adv.unsqueeze(-1)
             pi, logp = ac.pi(obs, act)
@@ -358,9 +373,11 @@ def ppo(
                     ratio = torch.exp(logp - logp_old[batch])
                     sgn = torch.ones_like(ratio) * torch.sign(adv[batch])
                     ratio_clip = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio)
-                    r = torch.prod(sgn * torch.min(ratio * sgn, ratio_clip * sgn), dim=-1).unsqueeze(-1)
+                    r = torch.prod(sgn * torch.min(ratio * sgn, ratio_clip * sgn), dim=-1).unsqueeze(-1) 
                     r_mean = r.mean().detach()
-                    loss_pi += -(r * adv[batch] / r_mean).sum()
+                    entropy = pi.entropy()
+                    loss_pi += -(r * adv[batch] / r_mean).sum() - ent_coef * e_const * (entropy).sum()
+                    loss_ent += - (entropy).sum()
                 elif norm_type == 'disc_old':
                     pi, logp = ac.pi(obs[batch], act[batch])
                     ratio = torch.exp(logp - logp_old[batch])
@@ -370,6 +387,24 @@ def ppo(
                     radv = ratio * adv[batch]
                     lpi = torch.min(radv, r)
                     loss_pi += -(lpi).sum()
+                elif norm_type == 'disc_old6':
+                    pi, logp = ac.pi(obs[batch], act[batch])
+                    ratio = torch.exp(logp - logp_old[batch])
+                    r = torch.prod(ratio, dim=-1).unsqueeze(-1)
+                    radv = ratio * adv[batch]
+                    lpi = torch.min(radv, r)
+                    r_mask = (lpi == r)
+                    r_min = lpi[r_mask]
+                    loss_pi += -(radv).sum() - (r_min).sum()
+                elif norm_type == 'disc_old7':
+                    pi, logp = ac.pi(obs[batch], act[batch])
+                    ratio = torch.exp(logp - logp_old[batch])
+                    r = torch.prod(ratio, dim=-1).unsqueeze(-1)
+                    radv = ratio * adv[batch]
+                    lpi = torch.min(radv, r)
+                    r_mask = (lpi == r)
+                    r_min = lpi[r_mask]
+                    loss_pi += -(radv).sum() - (r_min).sum()
                 elif norm_type == 'gene_ent':
                     pi, logp = ac.pi(obs[batch], act[batch])
                     ratio = torch.exp(logp - logp_old[batch])
@@ -571,6 +606,7 @@ def ppo(
 
     # Prepare for interaction with environment
     start_time = time.time()
+    start_time_test = time.time()
     best_ep_ret = -np.inf
 
     # Main loop: collect experience in env and update/log each epoch
