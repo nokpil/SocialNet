@@ -37,8 +37,12 @@ class DeepSet(nn.Module):
             nn.Linear(dim_hidden, dim_hidden),
             self.act,
             nn.Linear(dim_hidden, dim_hidden),
+            self.act,
+            nn.Linear(dim_hidden, dim_hidden),
         )
         self.dec = nn.Sequential(
+            nn.Linear(dim_hidden, dim_hidden),
+            self.act,
             nn.Linear(dim_hidden, dim_hidden),
             self.act,
             nn.Linear(dim_hidden, dim_hidden),

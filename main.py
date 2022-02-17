@@ -51,14 +51,14 @@ parser.add_argument("--seed", default=42, type=int, metavar="S", help="seed (def
 
 # Model specification : Responsible for neural model construction and environment settings.
 parser.add_argument("-B", metavar="B", type=int, default=1000, help="Number of batches (for gradient update)")
-parser.add_argument("-E", metavar="E", type=int, default=16, help="Number of ensembles")
+parser.add_argument("-E", metavar="E", type=int, default=10, help="Number of ensembles")
 parser.add_argument("-M", metavar="M", type=int, default=100, help="Number of particles")
 parser.add_argument("-N", metavar="N", type=int, default=15, help="Number of gene dimension (N of NK model)")
 parser.add_argument("-K", metavar="K", type=int, default=7, help="Enviromental complexity (K or NK model)")
 parser.add_argument("-NN", metavar="NN", type=int, default=3, help="Number of neighbors for social reference")
 parser.add_argument("-exp", metavar="EXP", type=int, default=8, help="Ruggedness of the landscape (default : 8)")
-parser.add_argument("-L", metavar="L", type=int, default=50, help="Trajectory length of a single episode divided by repeat length R.")
-parser.add_argument("-R", metavar="R", type=int, default=4, help="Numbers of trajectory repetition. L * R = total length (usually 200).")
+parser.add_argument("-L", metavar="L", type=int, default=200, help="Trajectory length of a single episode divided by repeat length R.")
+parser.add_argument("-R", metavar="R", type=int, default=1, help="Numbers of trajectory repetition. L * R = total length (usually 200).")
 parser.add_argument("-I", metavar="I", type=int, default=100, help="Number of iterations for each training")
 parser.add_argument("--ent-coef", metavar="EC", type=float, default=0.05, help="Coeffcient for entropy loss")
 parser.add_argument("--graph-type", "-gt", metavar='GT', choices=graph_names, help="Interaction graph generator: " + " | ".join(graph_names) + " (default: complete)")
@@ -70,7 +70,7 @@ parser.add_argument("--corr-type", "-ct", metavar='CT', type=str, default='FF', 
 parser.add_argument("--norm-type", "-nt", metavar='NT', type=str, default='disc', help="Type of normalization for policy gradient: " + " | ".join(norm_names) + " (default: disc)")
 parser.add_argument("--rescale", "-rs", metavar='RS', type=str2bool, default=False, help="Rescaling. If true, scores in obs will be multiplied by reward_const of environment (typically 100)")
 parser.add_argument("--terminate", "-tm", metavar='TM', type=str2bool, default=False, help="Epoch termination. If true, value will be reaplced with 0 when finishing the path.")
-parser.add_argument("--checkpoint", "-cp", metavar='CP', default=-1, type=int, help="Epoch of saved checkpoint of the model, if not, 0.")
+parser.add_argument("--checkpoint", "-cp", metavar='CP', default='-1', type=str, help="Epoch of saved checkpoint of the model, if not, 0.")
 parser.add_argument("-n", "--exp-name", type=str, default="ppo", help="Experiment name")
 
 args = parser.parse_args()
@@ -83,9 +83,12 @@ if __name__ == "__main__":
 
     exp_name = f'{args.arch}_{args.graph_type}_{args.reward_type}_{args.action_type}_{args.env_scheduler_type}_{args.extra_type}_{args.corr_type}_{args.norm_type}_EC{args.ent_coef}_N{args.N}K{args.K}NN{args.NN}RS{bool2str(args.rescale)}TM{bool2str(args.terminate)}_{args.exp_name}'
     exp_name_cp = ''
-    if args.checkpoint > 0:
+    checkpoint = (args.checkpoint).split('_')
+    if int(checkpoint[0]) > 0:
         exp_name_cp = f'{args.arch}_{args.graph_type}_{args.reward_type}_{args.action_type}_{args.env_scheduler_type}_{args.extra_type}_TT_{args.norm_type}_EC{args.ent_coef}_N{args.N}K{args.K}NN{args.NN}RS{bool2str(args.rescale)}TM{bool2str(args.terminate)}_{args.exp_name}'
-        exp_name += '_cp'
+        exp_name += '_cp_' + checkpoint[1]
+
+    #args.env_scheduler_type = 'multifixed'
 
     env_scheduler_kwargs = {
         'local_rank': local_rank,
@@ -116,6 +119,7 @@ if __name__ == "__main__":
 
     print(env_kwargs['env_scheduler'].local_rank)
 
+    #ac_kwargs = {'activation': nn.ReLU()}
     ac_kwargs = {'activation': nn.Tanh()}
     logger_kwargs = setup_logger_kwargs(exp_name, args.seed)
 
@@ -135,7 +139,7 @@ if __name__ == "__main__":
         repeat_len=args.R,
         epochs=args.epochs,
         batch_size=args.B,
-        test_batch_size=args.B,
+        test_batch_size=args.B * 5,
         gamma=args.gamma,
         clip_ratio=args.clip_ratio,
         ent_coef=args.ent_coef,
@@ -153,6 +157,6 @@ if __name__ == "__main__":
         distributed=args.distributed,
         baselines=baseline_names,
         env_scheduler_type=args.env_scheduler_type,
-        checkpoint=(exp_name_cp, args.checkpoint),
+        checkpoint=(exp_name_cp, checkpoint[0]),
         local_rank=local_rank
     )

@@ -133,7 +133,7 @@ class SL_NK_total(SL_NK):
             neighbor_feature.append(np.zeros_like(scores_neighbor))
         if 'R' in self.extra_type:
             scores_concat = np.concatenate([self.scores, scores_neighbor.squeeze(-1)], axis=-1)
-            score_rank = rankdata(scores_concat, axis=-1, method='max') / (self.neighbor_num + 1)
+            score_rank = rankdata(scores_concat, axis=-1, method='min') / (self.neighbor_num + 1)
             self_feature.append(np.expand_dims(score_rank[..., 0], axis=-1))
             neighbor_feature.append(np.expand_dims(score_rank[..., 1:], axis=-1))
         if 'F' in self.extra_type:
@@ -197,9 +197,8 @@ class SL_NK_total(SL_NK):
         return self.get_obs(), rew, self.scores.squeeze(-1)
 
 class SL_NK_split(SL_NK):
-    def __init__(self, E=16, M=100, N=15, K=7, exp=8, neighbor_num=3, graph_type=None, graph=None, graph_dict=None, reward_type=None, action_type=None, extra_type=None, corr_type=None, env_scheduler=None):
-        super().__init__(E, M, N, K, exp, neighbor_num, graph_type, graph, graph_dict, reward_type, action_type, extra_type, corr_type, env_scheduler)
-        self.extra_num = 2 if extra_type == 'none' else 3
+    def __init__(self, E=16, M=100, N=15, K=7, exp=8, neighbor_num=3, graph_type=None, graph=None, graph_dict=None, reward_type=None, action_type=None, extra_type=None, corr_type=None, rescale=False, self_include=True, env_scheduler=None):
+        super().__init__(E, M, N, K, exp, neighbor_num, graph_type, graph, graph_dict, reward_type, action_type, extra_type, corr_type, rescale, self_include, env_scheduler)
 
     def get_obs(self):
         neighbors = [list(np.random.permutation(list(self.graph.neighbors(i))))[:self.neighbor_num] for i in range(self.M)]
@@ -215,7 +214,7 @@ class SL_NK_split(SL_NK):
             neighbor_feature.append(np.expand_dims(np.zeros_like(states_neighbor), axis=-1))
         if 'R' in self.extra_type:
             scores_concat = np.concatenate([self.scores, scores_neighbor], axis=-1)
-            score_rank = rankdata(scores_concat, axis=-1, method='max') / (1 + self.neighbor_num)
+            score_rank = rankdata(scores_concat, axis=-1, method='min') / (1 + self.neighbor_num)
             self_feature.append(np.repeat(np.expand_dims(score_rank[..., 0], axis=(-2, -1)), repeats=self.N, axis=-2))
             neighbor_feature.append(np.repeat(np.expand_dims(score_rank[..., 1:], axis=(-2, -1)), repeats=self.N, axis=-2))
 
@@ -259,6 +258,9 @@ class SL_NK_split(SL_NK):
             rew = rew - now
         else:
             raise NotImplementedError
+
+        if self.rescale:
+            rew = rew / self.reward_constant
 
         rew = np.repeat(rew, self.N, axis=-1)
         self.scores = new_scores
