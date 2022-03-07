@@ -41,7 +41,7 @@ parser.add_argument("--NGPU", default=1, type=int)
 # Hyperparameters : Responsible for a single experiment
 parser.add_argument("-a", "--arch", metavar="ARCH", default="ds", choices=nn_names, help="NN architecture: " + " | ".join(nn_names) + " (default: mlp)")
 parser.add_argument("--env", metavar="ENV", default="NK", choices=env_names, help="Environments: " + " | ".join(env_names) + " (default: NK)")
-parser.add_argument("--gamma", metavar="GAM", type=float, default=0.999, help="Discounting factor (default: 0.999)")
+parser.add_argument("--gamma", metavar="GAM", type=float, default=0.98, help="Discounting factor (default: 0.999)")
 parser.add_argument("--lamda", metavar="LAM", type=float, default=0.95, help="Parameter of Generalized Advantage Estimator (GAE) (default: 0.95)")
 parser.add_argument("--pi-lr", metavar="PL", type=float, default=1e-5, help="Learning rate for actor (default: 1e-4)")
 parser.add_argument("--vf-lr", metavar="VL", type=float, default=3e-5, help="Learning rate for critic (default: 3e-4)")

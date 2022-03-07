@@ -160,11 +160,7 @@ def ppo(
     checkpoint=('', ''),
     local_rank=0
 ):
-    
-    #! delete this
-    checklist = ['disc_old', 'disc_old6']
-    #ent_coef = 0.003
-    #clip_ratio = 0.2
+
     if clip_ratio < 0:
         clip_ratio = 100  # effectively no clip
     os.environ['MPLCONFIGDIR'] = "./"
@@ -236,9 +232,6 @@ def ppo(
         vf_optimizer.load_state_dict(checkpoint['vf_optimizer'])
     del checkpoint
     torch.cuda.empty_cache()
-
-    #pi_optimizer.param_groups[0]['lr'] = 1e-6
-    #vf_optimizer.param_groups[0]['lr'] = 3e-6
     
     # Count variables
     var_counts = tuple(core.count_vars(module) for module in [ac.pi, ac.v])
@@ -247,12 +240,10 @@ def ppo(
         logger.log("\nNumber of parameters: \t pi: %d, \t v: %d\n" % var_counts)
 
     # Set up experience buffer
-    buf = PPOBuffer(obs_dim, act_dim, ensemble_num, agent_num, dim_len, trj_len, gamma, lam, split=True if action_type == 'split' else False)
+    buf = PPOBuffer(obs_dim, act_dim, ensemble_num, agent_num, dim_len, trj_len * repeat_len, gamma, lam, split=True if action_type == 'split' else False)
 
     # Set up function for computing PPO policy loss
     def compute_loss_pi(obs, act, adv, logp_old, norm_type='disc', epoch=0):
-        e_const = 1
-        #e_const = min(1, epoch / 5000)
         # Policy loss
         if norm_type == 'disc':
             adv = adv.unsqueeze(-1)
@@ -262,57 +253,13 @@ def ppo(
             ratio_clip = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio)
             r = torch.prod(sgn * torch.min(ratio * sgn, ratio_clip * sgn), dim=-1).unsqueeze(-1)
             r_mean = r.mean().detach()
-            loss_pi = -(r * adv / r_mean).mean()  - ent_coef * e_const * (pi.entropy()).mean()
-        elif norm_type == 'disc_old':
-            adv = adv.unsqueeze(-1)
-            pi, logp = ac.pi(obs, act)
-            ratio = torch.exp(logp - logp_old)
-            sgn = torch.ones_like(ratio) * torch.sign(adv)
-            ratio_clip = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio)
-            r = torch.prod(sgn * torch.min(ratio * sgn, ratio_clip * sgn), dim=-1).unsqueeze(-1)
-            loss_pi = -(torch.min(ratio * adv, r)).mean()
-        elif norm_type == 'disc_old6':
-            adv = adv.unsqueeze(-1)
-            pi, logp = ac.pi(obs, act)
-            ratio = torch.exp(logp - logp_old)
-            r = torch.prod(ratio, dim=-1).unsqueeze(-1)
-            radv = ratio * adv
-            lpi = torch.min(radv, r)
-            r_mask = (lpi == r)
-            r_min = lpi[r_mask]
-            loss_pi = -(radv).mean() - (r_min).mean()
-        elif norm_type == 'disc_old7':
-            adv = adv.unsqueeze(-1)
-            pi, logp = ac.pi(obs, act)
-            ratio = torch.exp(logp - logp_old)
-            r = torch.prod(ratio, dim=-1).unsqueeze(-1)
-            radv = ratio * adv
-            lpi = torch.min(radv, r)
-            r_mask = (lpi == r)
-            r_min = lpi[r_mask]
-            loss_pi = -(radv).mean() - (r_min).mean()
+            loss_pi = -(r * adv / r_mean).mean()  - ent_coef * (pi.entropy()).mean()
         elif norm_type == 'gene_ent':
             adv = adv.unsqueeze(-1)
             pi, logp = ac.pi(obs, act)
             ratio = torch.exp(logp - logp_old)
             clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
-            loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - ent_coef * e_const * (pi.entropy()).mean()
-        elif norm_type == 'gene_logp':
-            adv = adv.unsqueeze(-1)
-            pi, logp = ac.pi(obs, act)
-            ratio = torch.exp(logp - logp_old)
-            clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
-            loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - ent_coef * e_const * (-logp).mean()
-        elif norm_type == 'agent_ent':
-            pi, logp = ac.pi(obs, act)
-            ratio = torch.exp(torch.sum(logp, dim=-1) - torch.sum(logp_old, dim=-1))
-            clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
-            loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - ent_coef * e_const * (pi.entropy()).mean()
-        elif norm_type == 'agent_logp':
-            pi, logp = ac.pi(obs, act)
-            ratio = torch.exp(torch.sum(logp, dim=-1) - torch.sum(logp_old, dim=-1))
-            clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv
-            loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - ent_coef * e_const * (-logp).mean()
+            loss_pi = -(torch.min(ratio * adv, clip_adv)).mean() - ent_coef * (pi.entropy()).mean()
         else:
             raise NotImplementedError
 
@@ -358,11 +305,9 @@ def ppo(
 
     def validate_pi(obs, act, adv, logp_old, norm_type='disc', epoch=0):
         loss_pi, loss_ent, approx_kl, ent, clipfrac = 0, 0, 0, 0, 0
-        # e_const = max(-1, (2000 - epoch) / 2000)
         radv_mag, radv_raw_mag, r_mag, r_raw_mag, radv_ratio = 0, 0, 0, 0, 0
         r_list = []
         radv_list = []
-        #e_const = min(1, epoch / 5000)
         e_const = 1
         adv = adv.unsqueeze(-1)
         counter = 0
@@ -378,33 +323,6 @@ def ppo(
                     entropy = pi.entropy()
                     loss_pi += -(r * adv[batch] / r_mean).sum() - ent_coef * e_const * (entropy).sum()
                     loss_ent += - (entropy).sum()
-                elif norm_type == 'disc_old':
-                    pi, logp = ac.pi(obs[batch], act[batch])
-                    ratio = torch.exp(logp - logp_old[batch])
-                    sgn = torch.ones_like(ratio) * torch.sign(adv[batch])
-                    ratio_clip = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio)
-                    r = torch.prod(sgn * torch.min(ratio * sgn, ratio_clip * sgn), dim=-1).unsqueeze(-1)
-                    radv = ratio * adv[batch]
-                    lpi = torch.min(radv, r)
-                    loss_pi += -(lpi).sum()
-                elif norm_type == 'disc_old6':
-                    pi, logp = ac.pi(obs[batch], act[batch])
-                    ratio = torch.exp(logp - logp_old[batch])
-                    r = torch.prod(ratio, dim=-1).unsqueeze(-1)
-                    radv = ratio * adv[batch]
-                    lpi = torch.min(radv, r)
-                    r_mask = (lpi == r)
-                    r_min = lpi[r_mask]
-                    loss_pi += -(radv).sum() - (r_min).sum()
-                elif norm_type == 'disc_old7':
-                    pi, logp = ac.pi(obs[batch], act[batch])
-                    ratio = torch.exp(logp - logp_old[batch])
-                    r = torch.prod(ratio, dim=-1).unsqueeze(-1)
-                    radv = ratio * adv[batch]
-                    lpi = torch.min(radv, r)
-                    r_mask = (lpi == r)
-                    r_min = lpi[r_mask]
-                    loss_pi += -(radv).sum() - (r_min).sum()
                 elif norm_type == 'gene_ent':
                     pi, logp = ac.pi(obs[batch], act[batch])
                     ratio = torch.exp(logp - logp_old[batch])
@@ -412,45 +330,8 @@ def ppo(
                     clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv[batch]
                     loss_pi += -(torch.min(ratio * adv[batch], clip_adv)).sum() - ent_coef * e_const * (entropy).sum()
                     loss_ent += - (entropy).sum()
-                elif norm_type == 'gene_logp':
-                    pi, logp = ac.pi(obs[batch], act[batch])
-                    ratio = torch.exp(logp - logp_old[batch])
-                    clip_adv = torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv[batch]
-                    loss_pi += -(torch.min(ratio * adv[batch], clip_adv)).sum() - ent_coef * e_const * (-logp).sum()
-                    loss_ent += - (-logp).sum()
-                elif norm_type == 'agent_ent':
-                    pi, logp = ac.pi(obs[batch], act[batch])
-                    ratio = torch.exp(torch.sum(logp, dim=-1) - torch.sum(logp_old[batch], dim=-1))
-                    clip_adv = (torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv[batch])
-                    entropy = pi.entropy()
-                    loss_pi += -(torch.min(ratio * adv[batch], clip_adv)).sum() - ent_coef * e_const * (entropy).sum()
-                    loss_ent += -(entropy).sum()
-                elif norm_type == 'agent_logp':
-                    pi, logp = ac.pi(obs[batch], act[batch])
-                    ratio = torch.exp(torch.sum(logp, dim=-1) - torch.sum(logp_old[batch], dim=-1))
-                    clip_adv = (torch.clamp(ratio, 1 - clip_ratio, 1 + clip_ratio) * adv[batch])
-                    loss_pi += -(torch.min(ratio * adv[batch], clip_adv)).sum() - ent_coef * e_const * (-logp).sum()
-                    loss_ent += -(-logp).sum()
-                elif norm_type == 'group':
-                    pass
                 else:
                     raise NotImplementedError
-
-                if norm_type in checklist:
-                    radv_mask = (lpi == radv)
-                    r_mask = (lpi == r)
-                    radv_min = lpi[radv_mask]
-                    r_min = lpi[r_mask]
-
-                    radv_ratio += torch.mean(radv_mask.float())
-                    radv_mag += torch.sum(radv_min) / torch.sum((radv_mask).float())
-                    radv_raw_mag += radv.mean()
-                    if torch.sum((r_mask).float()) > 0:
-                        r_mag += torch.sum(r_min) / torch.sum((r_mask).float())
-                        r_raw_mag += r.mean()
-                    counter += 1
-                    r_list.append(r)
-                    radv_list.append(radv)
 
                 # Useful extra info
                 approx_kl += (logp_old[batch] - logp).sum().item()
@@ -465,31 +346,15 @@ def ppo(
         total_num = test_sampler.size if norm_type in ['agent', 'agent_entP', 'agent_entN'] else test_sampler.size * obs.shape[-1]
         loss_pi = loss_pi / total_num
         loss_ent = loss_ent / total_num
-        if norm_type in checklist:
-            pi_info = dict(
-                kl=approx_kl / total_num,
-                ent=ent / total_num,
-                cf=clipfrac / total_num,
-                radv_ratio=radv_ratio / counter,
-                radv_mag=radv_mag / counter,
-                radv_raw_mag=radv_raw_mag / counter,
-                r_mag=r_mag / counter,
-                r_raw_mag=r_raw_mag / counter,
-                r_list=torch.concat(r_list).cpu().numpy().flatten(),
-                radv_list=torch.concat(radv_list).cpu().numpy().flatten()
-            )
-        else:
-            pi_info = dict(
-                kl=approx_kl / total_num,
-                ent=ent / total_num,
-                cf=clipfrac / total_num,
-            )
-
+        pi_info = dict(
+            kl=approx_kl / total_num,
+            ent=ent / total_num,
+            cf=clipfrac / total_num,
+        )
         return loss_pi, loss_ent, pi_info
 
     def validate_v(obs, ret):
         loss_v = 0
-        
         with torch.no_grad():
             for batch in test_sampler:
                 value_tmp = ac.v(obs[batch])
@@ -522,7 +387,6 @@ def ppo(
         v_l_old = validate_v(obs, ret).item()
 
         # Train policy with multiple steps of sgd
-   
         with Join([ac.pi]):
             for i in range(int(train_pi_iters / repeat_len)):
                 pi_optimizer.zero_grad()
@@ -535,8 +399,8 @@ def ppo(
                 pi_optimizer.step()
 
                 if kl > 1.5 * target_kl:
-                    #logger.log("Early stopping at step %d due to reaching max kl." % i)
                     print(f"Early stopping at step {i} due to reaching max kl at rank {local_rank}.")
+                    #logger.log("Early stopping at step %d due to reaching max kl." % i)
                     break  # currently not suitable for DDP, ac.pi.join does not work.
 
         if rank_0:
@@ -556,71 +420,34 @@ def ppo(
 
         # Log changes from update
         kl, ent, cf = pi_info["kl"], pi_info_old["ent"], pi_info["cf"]
-        if norm_type in checklist:
-            radv_ratio, radv_mag, radv_raw_mag, r_mag, r_raw_mag, = pi_info['radv_ratio'], pi_info['radv_mag'], pi_info['radv_raw_mag'], pi_info['r_mag'], pi_info['r_raw_mag']
-            r_list, radv_list = pi_info['r_list'], pi_info['radv_list']
-            
-            if rank_0:
-                logger.store(
-                    LossPi=pi_l_old,
-                    LossEnt=ent_l_old,
-                    LossV=v_l_old,
-                    KL=kl,
-                    Entropy=ent,
-                    ClipFrac=cf,
-                    radv_ratio=radv_ratio,
-                    radv_mag=radv_mag,
-                    radv_raw_mag=radv_raw_mag,
-                    r_mag=r_mag,
-                    r_raw_mag=r_raw_mag,
-                    DeltaLossPi=(loss_pi - pi_l_old),
-                    DeltaLossV=(loss_v - v_l_old)
-                )
-                '''
-                fig = plt.figure(figsize=(4, 4), dpi=150)
-                ax = fig.add_subplot(111)
-                num, val, _ = ax.hist(r_list, color='r', alpha=0.3, bins=100)
-                #print(num, val)
-                ax.hist(radv_list, color='b', alpha=0.3, bins=100)
-                ax.vlines(r_list.mean(), 0, max(num) * 15)
-                ax.set_xlabel('value')
-                ax.set_ylabel('number')
-                logger.writer.add_figure('test', fig, global_step=epoch)
-                
-                '''
-               
-        else:
-            if rank_0:
-                logger.store(
-                    LossPi=pi_l_old,
-                    LossEnt=ent_l_old,
-                    LossV=v_l_old,
-                    KL=kl,
-                    Entropy=ent,
-                    ClipFrac=cf,
-                    DeltaLossPi=(loss_pi - pi_l_old),
-                    DeltaLossV=(loss_v - v_l_old)
-                )
-
+        if rank_0:
+            logger.store(
+                LossPi=pi_l_old,
+                LossEnt=ent_l_old,
+                LossV=v_l_old,
+                KL=kl,
+                Entropy=ent,
+                ClipFrac=cf,
+                DeltaLossPi=(loss_pi - pi_l_old),
+                DeltaLossV=(loss_v - v_l_old)
+            )
 
 
     # Prepare for interaction with environment
     start_time = time.time()
-    start_time_test = time.time()
     best_ep_ret = -np.inf
 
     # Main loop: collect experience in env and update/log each epoch
     
     scr_buf_figure = np.zeros((ensemble_num, agent_num, trj_len * repeat_len), dtype=np.float32)  # scr_buf for continuous figure
     for epoch in range(epochs):
-        o, _ = env.reset()
         ep_ret, ep_len = 0, 0
+        o, _ = env.reset()
         for rep in range(repeat_len):
             for t in range(trj_len):
                 epoch_ended = (t == trj_len - 1) and (rep == repeat_len - 1)
                 a, v, logp = ac.step(torch.as_tensor(o, dtype=torch.float32, device=device))
                 next_o, r, s = env.step(a)
-
                 ep_ret += r
                 ep_len += 1
                 
@@ -654,9 +481,11 @@ def ppo(
                         buf.finish_path(np.zeros_like(v))
                     else:
                         buf.finish_path(v)
-
-            update(world_size=env.env_scheduler.NGPU, epoch=epoch)
-
+            if not epoch_ended:
+                o, _ = env.reset(states=env.states)
+            
+        update(world_size=env.env_scheduler.NGPU, epoch=epoch)
+            
         # Save model
         if rank_0:
             logger.store(Ret=ep_ret / ep_len, EpLen=ep_len, FinalScore=np.mean(s))
@@ -700,35 +529,31 @@ def ppo(
             logger.log_tabular("ClipFrac", average_only=True)
             logger.log_tabular("StopIter", average_only=True)
             logger.log_tabular("Time", time.time() - start_time)
-            if norm_type in checklist:
-                logger.log_tabular("r_mag", average_only=True)
-                logger.log_tabular("r_raw_mag", average_only=True)
-                logger.log_tabular("radv_mag", average_only=True)
-                logger.log_tabular("radv_raw_mag", average_only=True)
-                logger.log_tabular("radv_ratio", average_only=True)
             logger.dump_tabular()
 
             # Figure drawing
-            fig = plt.figure(figsize=(4, 4), dpi=150)
-            ax = fig.add_subplot(111)
-            if env.rescale:
-                rescale_const = 1.
-            else:
-                rescale_const = env.reward_constant
+            draw_figure = True
+            if draw_figure:
+                fig = plt.figure(figsize=(4, 4), dpi=150)
+                ax = fig.add_subplot(111)
+                if env.rescale:
+                    rescale_const = 1.
+                else:
+                    rescale_const = env.reward_constant
 
-            if baselines:
-                for baseline_name in baselines:
-                    x = baseline_data_dict[baseline_name]['scr_buf'] / rescale_const
-                    avg_pf = np.mean(x, axis=tuple(range(0, len(x.shape) - 1)))
-                    ax.plot(np.arange(x.shape[-1]), avg_pf, label=baseline_name)
+                if baselines:
+                    for baseline_name in baselines:
+                        x = baseline_data_dict[baseline_name]['scr_buf'] / rescale_const
+                        avg_pf = np.mean(x, axis=tuple(range(0, len(x.shape) - 1)))
+                        ax.plot(np.arange(x.shape[-1]), avg_pf, label=baseline_name)
 
-            x = scr_buf_figure
-            avg_pf = np.mean(x, axis=tuple(range(0, len(x.shape) - 1)))
-            ax.plot(np.arange(x.shape[-1]), avg_pf, label='RL')
-            ax.set_xlabel('Time')
-            ax.set_ylabel('Average Performance')
-            ax.legend()
-            logger.writer.add_figure('Average Performance', fig, global_step=epoch)
-            print('finish')
+                x = scr_buf_figure
+                avg_pf = np.mean(x, axis=tuple(range(0, len(x.shape) - 1)))
+                ax.plot(np.arange(x.shape[-1]), avg_pf, label='RL')
+                ax.set_xlabel('Time')
+                ax.set_ylabel('Average Performance')
+                ax.legend()
+                logger.writer.add_figure('Average Performance', fig, global_step=epoch)
+                print('finish')
     if rank_0:
         logger.close()
