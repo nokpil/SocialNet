@@ -25,36 +25,36 @@ class PPOBuffer:
     for calculating the advantages of state-action pairs.
     """
 
-    def __init__(self, obs_dim, act_dim, ensemble_num, agent_num, dim_len, trj_len, gamma=0.99, lam=0.95, split=False):
+    def __init__(self, obs_dim, act_dim, ensemble_num, agent_num, dim_len, total_trj_len, gamma=0.99, lam=0.95, split=False):
         self.split = split
         self.N = dim_len
         if split:
-            self.obs_buf = np.zeros((ensemble_num, agent_num, self.N, trj_len, *obs_dim), dtype=np.float32)
-            self.act_buf = np.zeros((ensemble_num, agent_num, self.N, trj_len), dtype=np.float32)  
-            self.adv_buf = np.zeros((ensemble_num, agent_num, self.N, trj_len), dtype=np.float32)
-            self.rew_buf = np.zeros((ensemble_num, agent_num, self.N, trj_len), dtype=np.float32)
-            self.ret_buf = np.zeros((ensemble_num, agent_num, self.N, trj_len), dtype=np.float32)
-            self.scr_buf = np.zeros((ensemble_num, agent_num, trj_len), dtype=np.float32)
-            self.val_buf = np.zeros((ensemble_num, agent_num, self.N, trj_len), dtype=np.float32)
-            self.logp_buf = np.zeros((ensemble_num, agent_num, self.N, trj_len), dtype=np.float32)
+            self.obs_buf = np.zeros((ensemble_num, agent_num, self.N, total_trj_len, *obs_dim), dtype=np.float32)
+            self.act_buf = np.zeros((ensemble_num, agent_num, self.N, total_trj_len), dtype=np.float32)  
+            self.adv_buf = np.zeros((ensemble_num, agent_num, self.N, total_trj_len), dtype=np.float32)
+            self.rew_buf = np.zeros((ensemble_num, agent_num, self.N, total_trj_len), dtype=np.float32)
+            self.ret_buf = np.zeros((ensemble_num, agent_num, self.N, total_trj_len), dtype=np.float32)
+            self.scr_buf = np.zeros((ensemble_num, agent_num, total_trj_len), dtype=np.float32)
+            self.val_buf = np.zeros((ensemble_num, agent_num, self.N, total_trj_len), dtype=np.float32)
+            self.logp_buf = np.zeros((ensemble_num, agent_num, self.N, total_trj_len), dtype=np.float32)
         else:
-            self.obs_buf = np.zeros((ensemble_num, agent_num, trj_len, *obs_dim), dtype=np.float32)
-            self.act_buf = np.zeros((ensemble_num, agent_num, trj_len, self.N), dtype=np.float32)
-            self.adv_buf = np.zeros((ensemble_num, agent_num, trj_len), dtype=np.float32)
-            self.rew_buf = np.zeros((ensemble_num, agent_num, trj_len), dtype=np.float32)
-            self.ret_buf = np.zeros((ensemble_num, agent_num, trj_len), dtype=np.float32)
-            self.scr_buf = np.zeros((ensemble_num, agent_num, trj_len), dtype=np.float32)
-            self.val_buf = np.zeros((ensemble_num, agent_num, trj_len), dtype=np.float32)
-            self.logp_buf = np.zeros((ensemble_num, agent_num, trj_len, self.N), dtype=np.float32)
+            self.obs_buf = np.zeros((ensemble_num, agent_num, total_trj_len, *obs_dim), dtype=np.float32)
+            self.act_buf = np.zeros((ensemble_num, agent_num, total_trj_len, self.N), dtype=np.float32)
+            self.adv_buf = np.zeros((ensemble_num, agent_num, total_trj_len), dtype=np.float32)
+            self.rew_buf = np.zeros((ensemble_num, agent_num, total_trj_len), dtype=np.float32)
+            self.ret_buf = np.zeros((ensemble_num, agent_num, total_trj_len), dtype=np.float32)
+            self.scr_buf = np.zeros((ensemble_num, agent_num, total_trj_len), dtype=np.float32)
+            self.val_buf = np.zeros((ensemble_num, agent_num, total_trj_len), dtype=np.float32)
+            self.logp_buf = np.zeros((ensemble_num, agent_num, total_trj_len, self.N), dtype=np.float32)
         self.reward_normalizer = RewardNormalizer(ensemble_num, agent_num)
         self.gamma, self.lam = gamma, lam
-        self.ptr, self.path_start_idx, self.trj_len = 0, 0, trj_len
+        self.ptr, self.path_start_idx, self.total_trj_len = 0, 0, total_trj_len
 
     def store(self, obs, act, rew, val, score, logp):
         """
         Append one timestep of agent-environment interaction to the buffer.
         """
-        assert self.ptr < self.trj_len + 1  # buffer has to have room so you can store
+        assert self.ptr < self.total_trj_len + 1  # buffer has to have room so you can store
         if self.split:
             self.obs_buf[:, :, :, self.ptr] = obs
             self.act_buf[:, :, :, self.ptr] = act
@@ -77,7 +77,7 @@ class PPOBuffer:
         the buffer, with advantages appropriately normalized (shifted to have
         mean zero and std one). Also, resets some pointers in the buffer.
         """
-        assert self.ptr == self.trj_len  # buffer has to be full before you can get
+        assert self.ptr == self.total_trj_len  # buffer has to be full before you can get
         self.ptr, self.path_start_idx = 0, 0
         # the next two lines implement the advantage normalization trick
         adv_mean, adv_std = np.mean(self.adv_buf), np.std(self.adv_buf)
@@ -240,7 +240,8 @@ def ppo(
         logger.log("\nNumber of parameters: \t pi: %d, \t v: %d\n" % var_counts)
 
     # Set up experience buffer
-    buf = PPOBuffer(obs_dim, act_dim, ensemble_num, agent_num, dim_len, trj_len * repeat_len, gamma, lam, split=True if action_type == 'split' else False)
+    total_trj_len = trj_len * repeat_len
+    buf = PPOBuffer(obs_dim, act_dim, ensemble_num, agent_num, dim_len, total_trj_len, gamma, lam, split=True if action_type == 'split' else False)
 
     # Set up function for computing PPO policy loss
     def compute_loss_pi(obs, act, adv, logp_old, norm_type='disc', epoch=0):
@@ -279,11 +280,11 @@ def ppo(
         return ((ac.v(obs) - ret) ** 2).mean()
 
     if action_type == 'total':
-        train_sampler = BatchSampler(ensemble_num, agent_num, trj_len, batch_size, device=device)
-        test_sampler = BatchSampler(ensemble_num, agent_num, trj_len, test_batch_size, device=device, train=False)
+        train_sampler = BatchSampler(ensemble_num, agent_num, total_trj_len, batch_size, device=device)
+        test_sampler = BatchSampler(ensemble_num, agent_num, total_trj_len, test_batch_size, device=device, train=False)
     elif action_type == 'split':
-        train_sampler = BatchSampler_split(ensemble_num, agent_num, env.N, trj_len, batch_size, device=device)
-        test_sampler = BatchSampler_split(ensemble_num, agent_num, env.N, trj_len, test_batch_size, device=device, train=False)
+        train_sampler = BatchSampler_split(ensemble_num, agent_num, env.N, total_trj_len, batch_size, device=device)
+        test_sampler = BatchSampler_split(ensemble_num, agent_num, env.N, total_trj_len, test_batch_size, device=device, train=False)
 
     # Parellelize
     
@@ -305,12 +306,8 @@ def ppo(
 
     def validate_pi(obs, act, adv, logp_old, norm_type='disc', epoch=0):
         loss_pi, loss_ent, approx_kl, ent, clipfrac = 0, 0, 0, 0, 0
-        radv_mag, radv_raw_mag, r_mag, r_raw_mag, radv_ratio = 0, 0, 0, 0, 0
-        r_list = []
-        radv_list = []
         e_const = 1
         adv = adv.unsqueeze(-1)
-        counter = 0
         with torch.no_grad():
             for batch in test_sampler:
                 if norm_type == 'disc':
@@ -388,7 +385,7 @@ def ppo(
 
         # Train policy with multiple steps of sgd
         with Join([ac.pi]):
-            for i in range(int(train_pi_iters / repeat_len)):
+            for i in range(train_pi_iters):
                 pi_optimizer.zero_grad()
                 batch = next(train_sampler)
                 loss_pi, pi_info = compute_loss_pi(
@@ -406,7 +403,7 @@ def ppo(
         if rank_0:
             logger.store(StopIter=i)
         # Value function learning
-        for i in range(int(train_v_iters / repeat_len)):
+        for i in range(train_v_iters):
             vf_optimizer.zero_grad()
             batch = next(train_sampler)
             loss_v = compute_loss_v(obs[batch], ret[batch])
@@ -458,7 +455,7 @@ def ppo(
                 else:
                     if epoch_ended:
                         if reward_supply_type == 'final':
-                            buf.store(o, a, r * trj_len, v, s, logp)
+                            buf.store(o, a, r * total_trj_len, v, s, logp)
                         elif reward_supply_type == 'finalmean':
                             buf.store(o, a, ep_ret, v, s, logp)
                         else:
@@ -517,7 +514,7 @@ def ppo(
             logger.log_tabular("Ret", with_min_and_max=True)
             logger.log_tabular("FinalScore", average_only=True)
             logger.log_tabular("VVals", with_min_and_max=True)
-            logger.log_tabular("TotalEnvInteracts", (epoch + 1) * trj_len)
+            logger.log_tabular("TotalEnvInteracts", (epoch + 1) * total_trj_len)
             logger.log_tabular("LossPi", average_only=True)
             logger.log_tabular("LossEnt", average_only=True)
             logger.log_tabular("LossV", average_only=True)

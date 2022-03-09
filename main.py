@@ -99,6 +99,9 @@ if __name__ == "__main__":
         'exp': args.exp,
         'NGPU': args.NGPU
     }
+
+    #env_scheduler_kwargs['K'] = 11
+
     env_kwargs = {
         'E': args.E,
         'M': args.M,
@@ -116,6 +119,8 @@ if __name__ == "__main__":
         'rescale': args.rescale,
         'env_scheduler': envs.__dict__[args.env_scheduler_type + '_env_scheduler'](**env_scheduler_kwargs)
     }
+
+    #env_kwargs['K'] = 11
 
     print(env_kwargs['env_scheduler'].local_rank)
 
