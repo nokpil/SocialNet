@@ -25,6 +25,7 @@ action_names = ['total', 'split']
 scheduler_names = ['random', 'multifixed', 'periodic', 'gradual']
 norm_names = ['disc', 'gene', 'agent', 'group']
 baseline_names = ['FollowBest', 'FollowBest_indv', 'FollowMajor', 'FollowMajor_indv', 'IndvLearning', 'RandomCopy']
+#baseline_names = []
 
 parser = argparse.ArgumentParser(description="Running reinforcement learning of SocialLearning model.")
 # Due to the sampler. Since our sampler does // (floor division) only with positive integers, we don't have to worry about its behavior change.
@@ -100,7 +101,7 @@ if __name__ == "__main__":
         'NGPU': args.NGPU
     }
 
-    #env_scheduler_kwargs['K'] = 11
+    #env_scheduler_kwargs['K'] = 7
 
     env_kwargs = {
         'E': args.E,
@@ -120,7 +121,7 @@ if __name__ == "__main__":
         'env_scheduler': envs.__dict__[args.env_scheduler_type + '_env_scheduler'](**env_scheduler_kwargs)
     }
 
-    #env_kwargs['K'] = 11
+    #env_kwargs['K'] = 7
 
     print(env_kwargs['env_scheduler'].local_rank)
 
