@@ -202,8 +202,5 @@ class PNA(nn.Module):
         )
 
     def forward(self, x):
-        
-
-
         x = self.dec(x)
         return x

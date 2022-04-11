@@ -134,6 +134,7 @@ class SL_NK_total(SL_NK):
         if 'R' in self.extra_type:
             scores_concat = np.concatenate([self.scores, scores_neighbor.squeeze(-1)], axis=-1)
             score_rank = rankdata(scores_concat, axis=-1, method='min') / (self.neighbor_num + 1)
+            #score_rank = rankdata(scores_concat, axis=-1, method='max') / (self.neighbor_num + 1)
             self_feature.append(np.expand_dims(score_rank[..., 0], axis=-1))
             neighbor_feature.append(np.expand_dims(score_rank[..., 1:], axis=-1))
         if 'F' in self.extra_type:

@@ -25,6 +25,7 @@ action_names = ['total', 'split']
 scheduler_names = ['random', 'multifixed', 'periodic', 'gradual']
 norm_names = ['disc', 'gene', 'agent', 'group']
 baseline_names = ['FollowBest', 'FollowBest_indv', 'FollowMajor', 'FollowMajor_indv', 'IndvLearning', 'RandomCopy']
+#baseline_names = []
 
 parser = argparse.ArgumentParser(description="Running reinforcement learning of SocialLearning model.")
 # Due to the sampler. Since our sampler does // (floor division) only with positive integers, we don't have to worry about its behavior change.
@@ -47,7 +48,7 @@ parser.add_argument("--pi-lr", metavar="PL", type=float, default=1e-5, help="Lea
 parser.add_argument("--vf-lr", metavar="VL", type=float, default=3e-5, help="Learning rate for critic (default: 3e-4)")
 parser.add_argument("--wd", "--weight-decay", default=0.0, type=float, metavar="W", help="weight decay (default: 0.0)", dest="weight_decay")
 parser.add_argument("--clip-ratio", metavar="CR", type=float, default=-1, help="Clip ratio (default: 0.2)")
-parser.add_argument("--seed", default=42, type=int, metavar="S", help="seed (default: 42)", dest="seed")
+parser.add_argument("--seed", default=20, type=int, metavar="S", help="seed (default: 42)", dest="seed")
 
 # Model specification : Responsible for neural model construction and environment settings.
 parser.add_argument("-B", metavar="B", type=int, default=1000, help="Number of batches (for gradient update)")
