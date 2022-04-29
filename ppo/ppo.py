@@ -224,7 +224,7 @@ def ppo(
     if checkpoint[0]:  # not an emtpy string, which menas there is a checkpoint
         if rank_0:
             print(f'checkpoint:{checkpoint[1]}')
-        rel_path = f'data/runs/{checkpoint[0]}/{checkpoint[0]}_s42/'
+        rel_path = f'data/runs/{checkpoint[0]}/{checkpoint[0]}_s{seed}/'
         checkpoint = torch.load(rel_path + f'pyt_save/model{checkpoint[1]}.pth', map_location=lambda storage, loc: storage)
         ac.pi.load_state_dict(checkpoint['pi'])
         ac.v.load_state_dict(checkpoint['v'])

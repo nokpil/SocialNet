@@ -346,7 +346,7 @@ class EpochLogger(Logger):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.epoch_dict = dict()
-        self.baseline_data_dict = {'keys' : []}
+        self.baseline_data_dict = {'keys': []}
 
     def set_baseline(self, baseline_data_dict):
         self.baseline_data_dict = baseline_data_dict

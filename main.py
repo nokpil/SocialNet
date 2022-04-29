@@ -48,7 +48,7 @@ parser.add_argument("--pi-lr", metavar="PL", type=float, default=1e-5, help="Lea
 parser.add_argument("--vf-lr", metavar="VL", type=float, default=3e-5, help="Learning rate for critic (default: 3e-4)")
 parser.add_argument("--wd", "--weight-decay", default=0.0, type=float, metavar="W", help="weight decay (default: 0.0)", dest="weight_decay")
 parser.add_argument("--clip-ratio", metavar="CR", type=float, default=-1, help="Clip ratio (default: 0.2)")
-parser.add_argument("--seed", default=20, type=int, metavar="S", help="seed (default: 42)", dest="seed")
+parser.add_argument("--seed", default=42, type=int, metavar="S", help="seed (default: 42)", dest="seed")
 
 # Model specification : Responsible for neural model construction and environment settings.
 parser.add_argument("-B", metavar="B", type=int, default=1000, help="Number of batches (for gradient update)")
@@ -71,7 +71,7 @@ parser.add_argument("--corr-type", "-ct", metavar='CT', type=str, default='FF', 
 parser.add_argument("--norm-type", "-nt", metavar='NT', type=str, default='disc', help="Type of normalization for policy gradient: " + " | ".join(norm_names) + " (default: disc)")
 parser.add_argument("--rescale", "-rs", metavar='RS', type=str2bool, default=False, help="Rescaling. If true, scores in obs will be multiplied by reward_const of environment (typically 100)")
 parser.add_argument("--terminate", "-tm", metavar='TM', type=str2bool, default=False, help="Epoch termination. If true, value will be reaplced with 0 when finishing the path.")
-parser.add_argument("--checkpoint", "-cp", metavar='CP', default='-1', type=str, help="Epoch of saved checkpoint of the model, if not, 0.")
+parser.add_argument("--checkpoint", "-cp", metavar='CP', default='-1', type=str, help="(Epoch of saved checkpoint of the model)_(New run's name). if not, -1.")
 parser.add_argument("-n", "--exp-name", type=str, default="ppo", help="Experiment name")
 
 args = parser.parse_args()
