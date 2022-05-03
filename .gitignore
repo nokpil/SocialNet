@@ -21,6 +21,8 @@
 # ignore all files in the following directory
 data/
 result/
+.ipynb_checkpoints/
+__pycache__/
 
 # pickle
 *.pkl
@@ -29,5 +31,13 @@ result/
 **/*.pth
 *.pickle
 **/*.pickle
+
+## results
+*.svg
+**/*.svg
+*.ipynb
+**/*.ipynb
+*.mp4
+**/*.mp4
 
 # End of https://www.toptal.com/developers/gitignore/api/visualstudiocode
