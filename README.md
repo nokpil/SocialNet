@@ -12,14 +12,5 @@ by Seungwoong Ha and Hawoong Jeong.
 - Pytorch 1.0+ (written for 1.8)
 
 ## Run experiments
-To replicate the experiments by running
-```
-python main.py --system $1 --spreader $2 --iter $3 --epochs $4 --n $5 --m $6 --Q $7 --constant $8 --noise $9 --indicator ${10:-""} 
-
-```
-
-The code automatically generates dataset if it isn't already exist at the 'data' folder. The trained model will be saved at 'result' folder.
-
-### Argument descriptions
-- system : Type of system. 'S1', 'S2', 'S3', 'P1', 'P2', 'P3'
+TBA
 
